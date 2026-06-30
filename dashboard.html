@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEX & GEX Institutional Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14; --card: #11161f; --card-2: #161c27;
+    --border: #1f2733; --border-light: #2a3441;
+    --text: #e4e9f0; --muted: #6b7280; --muted-2: #8a93a6;
+    --pos: #00e5a8; --neg: #ef4444; --warn: #f59e0b; --info: #3b82f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; overflow-x: hidden; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  
+  header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+  .header-left { display: flex; align-items: center; gap: 24px; }
+  .logo { width: 36px; height: 36px; background: linear-gradient(135deg, var(--pos), var(--info)); border-radius: 8px; display: grid; place-items: center; font-weight: 800; color: #000; }
+  .asset-select { background: var(--card-2); border: 1px solid var(--border-light); color: var(--text); padding: 8px 16px; border-radius: 6px; font-weight: 700; font-size: 16px; cursor: pointer; outline: none; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .score-box { text-align: right; }
+  .score-val { font-size: 20px; font-weight: 700; }
+  .score-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+  .sentiment-pill { padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 13px; background: rgba(0, 229, 168, 0.1); color: var(--pos); border: 1px solid rgba(0, 229, 168, 0.3); }
+  .sentiment-pill.bear { background: rgba(239, 68, 68, 0.1); color: var(--neg); border-color: rgba(239, 68, 68, 0.3); }
+  .sentiment-pill.neutral { background: rgba(245, 158, 11, 0.1); color: var(--warn); border-color: rgba(245, 158, 11, 0.3); }
+  
+  .btn-import { background: var(--card-2); border: 1px solid var(--border-light); color: var(--text); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .btn-import:hover { border-color: var(--pos); }
+
+  .dashboard { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; padding: 24px; max-width: 1600px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; position: relative; overflow: hidden; }
+  .col-12 { grid-column: span 12; } .col-8 { grid-column: span 8; } .col-6 { grid-column: span 6; } .col-4 { grid-column: span 4; } .col-3 { grid-column: span 3; }
+  @media (max-width: 1200px) { .col-8, .col-6, .col-4, .col-3 { grid-column: span 6; } }
+  @media (max-width: 768px) { .col-12, .col-8, .col-6, .col-4, .col-3 { grid-column: span 12; } }
+
+  .card-title { font-size: 11px; color: var(--muted-2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .big-val { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+  .med-val { font-size: 24px; font-weight: 700; }
+  .sub-val { font-size: 13px; color: var(--muted-2); margin-top: 4px; }
+  .pos { color: var(--pos); } .neg { color: var(--neg); } .warn { color: var(--warn); }
+  
+  .engine-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
+  .engine-item { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 8px; text-align: center; }
+  .engine-lbl { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .engine-tag { font-weight: 700; font-size: 12px; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+  .tag-bull { background: rgba(0,229,168,.15); color: var(--pos); }
+  .tag-bear { background: rgba(239,68,68,.15); color: var(--neg); }
+  .tag-neutral { background: rgba(245,158,11,.15); color: var(--warn); }
+
+  .expos-comment { font-size: 13px; color: var(--text); margin-top: 12px; line-height: 1.4; padding-top: 12px; border-top: 1px solid var(--border); opacity: 0.8; }
+  .chart-box { height: 220px; margin-top: 8px; position: relative; }
+  .chart-box-lg { height: 320px; margin-top: 8px; position: relative; }
+  .rr-values { display: flex; gap: 16px; margin-bottom: 8px; }
+  .rr-box { background: var(--bg); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border); }
+  
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--card-2); border: 1px solid var(--border-light); padding: 12px 24px; border-radius: 8px; z-index: 1000; transition: transform 0.3s; font-size: 14px; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  .file-drag-over { border: 2px dashed var(--pos); background: rgba(0,229,168,0.05); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">G</div>
+    <select id="assetSelect" class="asset-select">
+      <option>SPX</option><option>NDX</option><option>RUT</option><option>VIX</option><option>BTC</option><option>ETH</option>
+    </select>
+    <div style="font-size: 12px; color: var(--muted);">DEX & GEX INSTITUTIONAL VIEW</div>
+  </div>
+  <div class="header-right">
+    <div class="score-box">
+      <div class="score-val mono" id="globalScore">+7.0</div>
+      <div class="score-lbl">SCORE GLOBAL /10</div>
+    </div>
+    <div class="sentiment-pill" id="sentimentPill">HAUSSIER</div>
+    <label class="btn-import">⬆ Import JSON<input type="file" id="fileInput" accept=".json" hidden></label>
+  </div>
+</header>
+
+<div class="dashboard" id="dashboardGrid">
+  <div class="card col-6">
+    <div class="card-title">SYNTHÈSE - ENGINE DE CONVERGENCE</div>
+    <div class="engine-grid">
+      <div class="engine-item"><div class="engine-lbl">L1 POSITIONING</div><div class="engine-tag tag-bull" id="l1Tag">BULL</div></div>
+      <div class="engine-item"><div class="engine-lbl">L2 STRUCTURE</div><div class="engine-tag tag-neutral" id="l2Tag">NEUTRAL</div></div>
+      <div class="engine-item"><div class="engine-lbl">L3 VOLATILITY</div><div class="engine-tag tag-bear" id="l3Tag">BEAR</div></div>
+      <div class="engine-item"><div class="engine-lbl">L4 MOMENTUM</div><div class="engine-tag tag-bull" id="l4Tag">BULL</div></div>
+      <div class="engine-item"><div class="engine-lbl">L5 FLOW</div><div class="engine-tag tag-neutral" id="l5Tag">NEUTRAL</div></div>
+    </div>
+  </div>
+  <div class="card col-3">
+    <div class="card-title">MAGNET PRIMAIRE</div>
+    <div class="big-val mono" id="magnetPrice">$5,210.50</div>
+    <div class="sub-val pos" id="magnetSub">+1.1% (Gravitation mécanique)</div>
+  </div>
+  <div class="card col-3">
+    <div class="card-title">STRESS MARCHÉ</div>
+    <div class="big-val warn" id="stressLevel">CALM</div>
+    <div class="sub-val" id="stressSub">Score: 0.0 / 10</div>
+  </div>
+  <div class="card col-6">
+    <div class="card-title">DEX · EXPOSITION DELTA <span style="text-transform:none; color:var(--muted); font-size:11px;">TENDANCE</span></div>
+    <div class="big-val mono neg" id="dexValue">-2.9 B$</div>
+    <div class="expos-comment" id="dexComment">Flux mécanique vendeur — dealers vendent du spot pour couvrir leur delta.</div>
+  </div>
+  <div class="card col-6">
+    <div class="card-title">GEX · EXPOSITION GAMMA <span style="text-transform:none; color:var(--muted); font-size:11px;">TENDANCE</span></div>
+    <div class="big-val mono neg" id="gexValue">-1.8 B$</div>
+    <div class="expos-comment" id="gexComment">Gamma négatif — la volatilité est attendue à la hausse, risque d'instabilité.</div>
+  </div>
+  <div class="card col-8">
+    <div class="card-title">HISTORIQUE DEX & GEX <span id="histAsset" style="text-transform:none; color:var(--muted-2);">- SPX</span></div>
+    <div class="chart-box-lg"><canvas id="historiqueChart"></canvas></div>
+  </div>
+  <div class="card col-4">
+    <div class="card-title">STRUCTURE DES ÉCHÉANCES</div>
+    <div style="font-size: 14px; margin-bottom: 8px;">
+      <span class="warn" id="termTag">CONTANGO</span> 
+      <span style="color:var(--muted-2); font-size:12px;" id="termDesc">— Calme, pas de stress immédiat</span>
+    </div>
+    <div class="chart-box-lg"><canvas id="termStructureChart"></canvas></div>
+  </div>
+  <div class="card col-4">
+    <div class="card-title">INVERSION DE RISQUE 25Δ</div>
+    <div class="rr-values">
+      <div class="rr-box"><div style="font-size:10px; color:var(--muted);">7J</div><div class="med-val mono neg" id="rr7d">-0.41</div></div>
+      <div class="rr-box"><div style="font-size:10px; color:var(--muted);">30J</div><div class="med-val mono neg" id="rr30d">-0.22</div></div>
+    </div>
+    <div class="chart-box"><canvas id="riskReversalChart"></canvas></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+function fmt(n, suffix="") { if(n===null||n===undefined||isNaN(n)) return "—"; let v = n.toLocaleString('en-US', {maximumFractionDigits: 2, minimumFractionDigits: 2}); return v + (suffix ? " " + suffix : ""); }
+
+function updateDashboard(ticker) {
+  if(!DATA || !DATA[ticker]) return;
+  const d = DATA[ticker];
+  document.getElementById('assetSelect').value = ticker;
+  
+  const lastDex = d.dex[d.dex.length-1] || 0;
+  const lastGex = d.gex[d.gex.length-1] || 0;
+  const prevDex = d.dex[d.dex.length-2] || lastDex;
+  const prevGex = d.gex[d.gex.length-2] || lastGex;
+  
+  let score = 0, sentiment = "NEUTRAL", pillClass = "neutral";
+  if (lastGex > 0 && lastDex > 0) { score = 8.0; sentiment = "HAUSSIER"; pillClass=""; }
+  else if (lastGex > 0 && lastDex < 0) { score = 4.0; sentiment = "MIXTE"; pillClass="neutral"; }
+  else if (lastGex < 0 && lastDex < 0) { score = -6.0; sentiment = "BAISSIER"; pillClass="bear"; }
+  else { score = 2.0; sentiment = "NEUTRE"; pillClass="neutral"; }
+  
+  document.getElementById('globalScore').textContent = (score > 0 ? "+" : "") + score.toFixed(1);
+  document.getElementById('globalScore').className = 'score-val mono ' + (score >= 4 ? 'pos' : score <= 0 ? 'neg' : 'warn');
+  const pill = document.getElementById('sentimentPill');
+  pill.textContent = sentiment; pill.className = 'sentiment-pill ' + pillClass;
+
+  const setTag = (id, type) => { const el = document.getElementById(id); el.className = 'engine-tag ' + (type === 'BULL' ? 'tag-bull' : type === 'BEAR' ? 'tag-bear' : 'tag-neutral'); el.textContent = type; };
+  setTag('l1Tag', lastDex > 0 ? 'BULL' : 'BEAR');
+  setTag('l2Tag', lastGex > 0 ? 'BULL' : 'BEAR');
+  setTag('l3Tag', lastGex < 0 ? 'BEAR' : 'BULL');
+  setTag('l4Tag', lastDex > prevDex ? 'BULL' : 'BEAR');
+  setTag('l5Tag', Math.abs(lastDex) > Math.abs(prevDex) ? 'BULL' : 'NEUTRAL');
+
+  const basePrices = {"SPX": 5200, "NDX": 18200, "RUT": 205, "VIX": 14, "BTC": 65000, "ETH": 3500};
+  const basePrice = basePrices[ticker] || 1000;
+  const magnet = basePrice * (1 + (lastGex > 0 ? 0.011 : -0.015));
+  document.getElementById('magnetPrice').textContent = "$" + magnet.toLocaleString('en-US', {maximumFractionDigits: 1});
+  const magnetPct = (lastGex > 0 ? 1.1 : -1.5);
+  const magnetSubEl = document.getElementById('magnetSub');
+  magnetSubEl.textContent = (magnetPct > 0 ? "+" : "") + magnetPct + "% (Gravitation mécanique)";
+  magnetSubEl.className = 'sub-val ' + (magnetPct > 0 ? 'pos' : 'neg');
+
+  const stressScore = lastGex < 0 ? 6.5 : 1.5;
+  const stressEl = document.getElementById('stressLevel');
+  stressEl.textContent = stressScore > 5 ? "STRESS" : "CALM";
+  stressEl.className = 'big-val ' + (stressScore > 5 ? 'neg' : 'pos');
+  document.getElementById('stressSub').textContent = "Score: " + stressScore.toFixed(1) + " / 10";
+
+  const dexEl = document.getElementById('dexValue');
+  dexEl.textContent = fmt(lastDex, d.suffix_dex);
+  dexEl.className = 'big-val mono ' + (lastDex > 0 ? 'pos' : 'neg');
+  document.getElementById('dexComment').textContent = lastDex < 0 ? "Flux mécanique vendeur — dealers vendent du spot." : "Flux mécanique acheteur — dealers achètent du spot.";
+
+  const gexEl = document.getElementById('gexValue');
+  gexEl.textContent = fmt(lastGex, d.suffix_gex);
+  gexEl.className = 'big-val mono ' + (lastGex > 0 ? 'pos' : 'neg');
+  document.getElementById('gexComment').textContent = lastGex < 0 ? "Gamma négatif — volatilité attendue à la hausse, instabilité." : "Gamma positif — volatilité attendue à la baisse, marché stabilisé.";
+
+  document.getElementById('histAsset').textContent = "- " + ticker;
+  renderHistoriqueChart(d);
+
+  const termData = lastGex < 0 ? [28, 26, 24, 22, 21, 20] : [15, 15.5, 16, 16.5, 17, 17.5];
+  const tagEl = document.getElementById('termTag');
+  tagEl.textContent = lastGex < 0 ? "BACKWARDATION" : "CONTANGO";
+  tagEl.className = lastGex < 0 ? 'neg' : 'warn';
+  document.getElementById('termDesc').textContent = lastGex < 0 ? "— Stress immédiat, panique" : "— Calme, pas de stress immédiat";
+  renderTermStructureChart(termData);
+
+  const rr7 = lastDex < 0 ? -0.41 : 0.15;
+  const rr30 = lastDex < 0 ? -0.22 : 0.08;
+  document.getElementById('rr7d').textContent = rr7.toFixed(2);
+  document.getElementById('rr7d').className = 'med-val mono ' + (rr7 < 0 ? 'neg' : 'pos');
+  document.getElementById('rr30d').textContent = rr30.toFixed(2);
+  document.getElementById('rr30d').className = 'med-val mono ' + (rr30 < 0 ? 'neg' : 'pos');
+  const rrHist = Array.from({length: 10}, (_, i) => lastDex < 0 ? -0.4 + Math.random()*0.2 : 0.1 + Math.random()*0.1);
+  renderRRChart(rrHist);
+}
+
+Chart.defaults.color = "#6b7280"; Chart.defaults.borderColor = "#1f2733"; Chart.defaults.font.family = "'Inter', sans-serif";
+let hChart, tChart, rChart;
+
+function renderHistoriqueChart(d) {
+  const ctx = document.getElementById('historiqueChart').getContext('2d');
+  if(hChart) hChart.destroy();
+  hChart = new Chart(ctx, { type: 'line', data: { labels: d.dates, datasets: [
+    { label: 'DEX', data: d.dex, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', borderWidth: 2, tension: 0.3, fill: false, pointRadius: 0 },
+    { label: 'GEX', data: d.gex, borderColor: '#00e5a8', backgroundColor: 'rgba(0,229,168,0.1)', borderWidth: 2, tension: 0.3, fill: false, pointRadius: 0 }
+  ]}, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: true, position: 'top', align: 'end' } }, scales: { x: { grid: { display: false } }, y: { grid: { color: '#1f2733' } } } } });
+}
+function renderTermStructureChart(data) {
+  const ctx = document.getElementById('termStructureChart').getContext('2d');
+  if(tChart) tChart.destroy();
+  tChart = new Chart(ctx, { type: 'line', data: { labels: ['7D', '14D', '30D', '60D', '90D', '180D'], datasets: [{ label: 'IV', data: data, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { grid: { color: '#1f2733' } } } } });
+}
+function renderRRChart(data) {
+  const ctx = document.getElementById('riskReversalChart').getContext('2d');
+  if(rChart) rChart.destroy();
+  const colors = data.map(v => v < 0 ? 'rgba(239,68,68,0.7)' : 'rgba(0,229,168,0.7)');
+  rChart = new Chart(ctx, { type: 'bar', data: { labels: data.map((_,i) => 'T' + (i+1)), datasets: [{ label: 'RR 25Δ', data: data, backgroundColor: colors, borderRadius: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { grid: { color: '#1f2733' } } } } });
+}
+
+let DATA = null; let currentTicker = "SPX";
+async function loadData() {
+  try {
+    const res = await fetch("data_dashboard.json?_=" + Date.now());
+    if(res.ok) { const json = await res.json(); if(json && Object.keys(json).length) { DATA = json; showToast("data_dashboard.json chargé avec succès"); return; } }
+  } catch(e) {}
+  const cached = sessionStorage.getItem("dashboard_data");
+  if(cached) { DATA = JSON.parse(cached); return; }
+  DATA = genDemoData(); showToast("Mode démo - Importez votre JSON ou utilisez data_dashboard.json");
+}
+
+function handleFile(file) {
+  if(!file) return; const reader = new FileReader();
+  reader.onload = e => { try { const json = JSON.parse(e.target.result); if(!json || !Object.keys(json).length) throw new Error("JSON vide"); DATA = json; sessionStorage.setItem("dashboard_data", JSON.stringify(json));
+    const select = document.getElementById('assetSelect'); select.innerHTML = ''; Object.keys(json).forEach(t => { const opt = document.createElement('option'); opt.value = t; opt.textContent = t; select.appendChild(opt); });
+    currentTicker = Object.keys(json)[0]; updateDashboard(currentTicker); showToast("Données importées avec succès");
+  } catch(err) { showToast("Erreur: " + err.message); } };
+  reader.readAsText(file);
+}
+
+document.getElementById('assetSelect').addEventListener('change', e => { currentTicker = e.target.value; updateDashboard(currentTicker); });
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+document.body.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('file-drag-over'); });
+document.body.addEventListener('dragleave', e => { document.body.classList.remove('file-drag-over'); });
+document.body.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('file-drag-over'); if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
+
+function genDemoData(){
+  const tickers = ["SPX", "NDX", "BTC", "ETH"]; const out = {}; const today = new Date();
+  for(const t of tickers){
+    const dates=[], dex=[], gex=[], sentiment=[]; let curDex = -2.0, curGex = -1.5;
+    for(let i=59;i>=0;i--){ const d = new Date(today); d.setDate(d.getDate()-i); dates.push(d.toISOString().slice(0,10)); curDex += (Math.random()-.45)*0.3; curGex += (Math.random()-.45)*0.4; dex.push(parseFloat(curDex.toFixed(2))); gex.push(parseFloat(curGex.toFixed(2))); sentiment.push(curGex > 0 ? "Bullish" : "Bearish"); }
+    out[t] = { dates, dex, gex, sentiment, suffix_dex: "B$", suffix_gex: "B$", type: t.includes('BTC') || t.includes('ETH') ? "Crypto" : "Index" };
+  } return out;
+}
+
+async function init() {
+  await loadData(); const select = document.getElementById('assetSelect');
+  if(DATA) { select.innerHTML = ''; Object.keys(DATA).forEach(t => { const opt = document.createElement('option'); opt.value = t; opt.textContent = t; select.appendChild(opt); }); currentTicker = Object.keys(DATA)[0]; updateDashboard(currentTicker); }
+}
+init();
+</script>
+</body>
+</html>
